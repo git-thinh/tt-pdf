@@ -5,7 +5,42 @@ file = 'C:/test/1.pdf';
 //file = 'D:/book/Nghìn xưa văn hiến 1975 tập 1.pdf';
 let dataBuffer = fs.readFileSync(file);
 
-const { createCanvas, loadImage } = require('canvas');
+const Canvas = require("canvas");
+
+function NodeCanvasFactory() { }
+NodeCanvasFactory.prototype = {
+    create: function NodeCanvasFactory_create(width, height) {
+        //assert(width > 0 && height > 0, "Invalid canvas size");
+        const canvas = Canvas.createCanvas(width, height);
+        const context = canvas.getContext("2d");
+        return {
+            canvas,
+            context,
+        };
+    },
+
+    reset: function NodeCanvasFactory_reset(canvasAndContext, width, height) {
+        assert(canvasAndContext.canvas, "Canvas is not specified");
+        assert(width > 0 && height > 0, "Invalid canvas size");
+        canvasAndContext.canvas.width = width;
+        canvasAndContext.canvas.height = height;
+    },
+
+    destroy: function NodeCanvasFactory_destroy(canvasAndContext) {
+        assert(canvasAndContext.canvas, "Canvas is not specified");
+
+        // Zeroing the width and height cause Firefox to release graphics
+        // resources immediately, which can greatly reduce memory consumption.
+        canvasAndContext.canvas.width = 0;
+        canvasAndContext.canvas.height = 0;
+        canvasAndContext.canvas = null;
+        canvasAndContext.context = null;
+    },
+};
+
+// Some PDFs need external cmaps.
+const CMAP_URL = "./pdfjs2.9.359/cmaps/";
+const CMAP_PACKED = true;
 
 function __getTextContentAsync(page) {
     //check documents https://mozilla.github.io/pdf.js/
@@ -74,6 +109,7 @@ async function __pdfBuffer(dataBuffer) {
         // script does not work).
         PDFJS.disableWorker = true;
         const loadingTask = PDFJS.getDocument(dataBuffer);
+        //const loadingTask = PDFJS.getDocument(dataBuffer, cMapUrl: CMAP_URL, cMapPacked: CMAP_PACKED);
         loadingTask.promise.then(doc => {
             let num_pages = doc.numPages || 0;
             ret.num_pages = num_pages;
@@ -103,23 +139,28 @@ async function __pdfBuffer(dataBuffer) {
                     const width = viewport.width;
                     console.log(width, height);
 
-                    const canvas = createCanvas(width, height);
-                    //const canvas = createCanvas(600, 800, 'pdf');
-                    const ctx = canvas.getContext('2d');
+                    //const canvas = createCanvas(width, height);
+                    ////const canvas = createCanvas(600, 800, 'pdf');
+                    //const ctx = canvas.getContext('2d');
 
-                    await page.render({ canvasContext: ctx, viewport: viewport });
-                    const base64 = canvas.toDataURL('image/png');
-                    //console.log(base64);
+                    //await page.render({ canvasContext: ctx, viewport: viewport });
+                    //const base64 = canvas.toDataURL('image/png');
+                    ////console.log(base64);
 
-                    const base64Data = base64.replace(/^data:image\/png;base64,/, "");
-                    //console.log(base64Data);
-                    var err = fs.writeFileSync("1.png", base64Data, 'base64');
+                    //const base64Data = base64.replace(/^data:image\/png;base64,/, "");
+                    ////console.log(base64Data);
+                    //var err = fs.writeFileSync("1.png", base64Data, 'base64');
+                    //console.log(err);
+
+                    const canvasFactory = new NodeCanvasFactory();
+                    const canvasAndContext = canvasFactory.create(width,height);
+                    const renderContext = { canvasContext: canvasAndContext.context, viewport, canvasFactory };
+
+                    await page.render(renderContext);
+
+                    const bufImage = canvasAndContext.canvas.toBuffer();
+                    var err = fs.writeFileSync("1.png", bufImage, 'binary');
                     console.log(err);
-
-
-
-
-
 
 
                     doc.destroy();
